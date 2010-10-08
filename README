@@ -1,10 +1,10 @@
 
 DESCRIPTION
 
-This is a script that that tries to completely exercise all pathways
-in an RnRS Scheme parser's number, character, symbol, and string
-processing.  It contains many unusual but valid Scheme tokens.  It is
-designed to be used for regression testing.
+This is a script that that tries to completely exercise all normative
+pathways in an R6RS Scheme token parser's number, character, symbol,
+and string processing.  It contains many unusual but valid Scheme
+tokens.  It is designed to be used for regression testing.
 
 To use it, run the scheme interpreter on the 'iotest.scm' file and
 capture its output.  It should run error free.
@@ -12,13 +12,14 @@ capture its output.  It should run error free.
 After changing a parser you can run it again and compare its output
 to previous runs to see how the parser has changed.
 
-'iotest.scm' consists of thousands of lines like the following
+'iotest.scm' consists of thousands of calls to the 'test' procedure,
+like the following
 
-(test 1 "'a" 'a)
+(test 1 "'a")
 
-The "test" procedure does nothing more than write and then display the
-token that is the last parameter.  The line above would output the
-following
+The "test" looks in the string that is the last parmeter for a token.
+And then it does nothing more than write and then display the token
+that is the last parameter.  The line above would output the following
 
      1: 'a               : a : a
 
@@ -29,6 +30,13 @@ The four columns are
 3. How the token is output by the write procedure
 4. How the token is output by the display procedure
 
+Because many valid strings and characters could have control
+characters, these escaped on output using a "^C"-style notation.
+
 COMPILATION
 
-There is a makefile.  The makefile generates a Guile script
+There is a makefile.  The makefile generates a Guile script.
+
+Before you run the makefile, you should edit it to set the scheme
+interpreter you are targeting as well as whether you want to test
+Unicode characters.

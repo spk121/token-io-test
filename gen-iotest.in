@@ -1,46 +1,73 @@
-m4_dnl  gen-iotest.in
-m4_changequote(`{',`}')
-m4_changecom()
+m4_changequote(`{',`}') m4_dnl
+m4_changecom() m4_dnl
+m4_ifelse(UTF_8,{1},{;;;  -*- mode: scheme; coding: utf-8 -*-},{;;;  -*- mode: scheme; coding: us-ascii -*-})
 
-;;;  gen-iotest -- generate a parser test script
+;;;  gen-iotest.in -- generate a parser test script
 ;;;
 ;;;  Copyright (C) 2010 Michael L. Gran
 ;;;  License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
 ;;;  This is free software: you are free to change and redistribute it.
 ;;;  There is NO WARRANTY, to the extent permitted by law.
 
-m4_ifelse(SCHEME, {guile-2.0}, {
-	m4_define({R6RS}) 
-	m4_define({CHAR_HEX_ESCAPES})
+;;; ------------------------
+;;; TARGETS
+;;;
+;;; Set the TARGET value to determine the environment in which the script will be
+;;; run.  TARGET can be one of
+;;; * guile-2.0
+;;; * guile-1.8
+;;; * mzscheme-4.1
+;;; * mit-gnu-scheme-9.0
+
+;;; ------------------------
+;;; CHARACTER ENCODINGS
+;;;
+;;; If the TEST_UNICODE define is set, the script will add in tests
+;;; for tokens that contain Unicode characters.  If it is not set,
+;;; only tests for tokens that contain ASCII characters will be
+;;; generated.
+;;;
+;;; If the UTF_8 define define is set, the script will be encoded
+;;; using the UTF-8 character set and it will presume UTF-8
+;;; functionality is present.  If it is not set, the script will be in
+;;; US-ASCII
+;;;
+
+m4_ifelse(TEST_R6RS,{1},{
+m4_ifelse(TEST_UNICODE,{1},{
+m4_define({TEST_R6RS_UNICODE},{1})
 })
-m4_ifelse(SCHEME, {mzscheme-4.1}, {
-	m4_define({R6RS}) 
-	m4_define({CHAR_HEX_ESCAPES})
 })
 
-m4_ifdef(R6RS,{
-m4_ifdef(UNICODE,{
-m4_define(R6RS_UNICODE)
-})
-})
 
-;;; MODULES
+;;; -------------------------
+;;; Here we go......
 
-m4_ifelse(SCHEME, {guile-1.8}, {
+
+;; Add module declarations, if necessary
+m4_ifelse(TARGET, {guile-1.8}, {
 (use-modules (srfi srfi-1))
+(use-syntax (ice-9 syncase))
 })
-m4_ifelse(SCHEME, {guile-2.0}, {
+m4_ifelse(TARGET, {guile-2.0}, {
 (use-modules (srfi srfi-1)
              (rnrs control))
+(read-enable 'r6rs-hex-escapes)
 })
-m4_ifelse(SCHEME, {mzscheme-4.1},{
+m4_ifelse(TARGET, {mzscheme-4.1},{
 (require srfi/1)
 })
-
+m4_ifelse(TARGET, {guile-1.8}, {
+(define-syntax when
+  (syntax-rules ()
+    ((when test result1 result2 ...)
+    (if test
+        (begin result1 result2 ...)))))
+})
 ;;; FUNCTIONS
 
-m4_ifdef(UNICODE,{
-m4_ifelse(SCHEME, {guile-2.0}, {(setlocale LC_ALL "")})
+m4_ifdef({TEST_UNICODE},{
+m4_ifelse(TARGET, {guile-2.0}, {(setlocale LC_ALL "")})
 })
 
 (define (run-test)
@@ -115,6 +142,10 @@ m4_ifelse(SCHEME, {guile-2.0}, {(setlocale LC_ALL "")})
       (let ((y (apply list-product (cdr x))))
         (list-product (car x) y))))))
 
+(define ignore-list-product
+  (lambda x
+    (make-list (apply * (map length x)) #f)))
+
 ;; Given a list of strings, append the strings together.  If one of
 ;; the strings is actually the value #f, return #f instead.
 (define try-string-append
@@ -134,30 +165,59 @@ m4_ifelse(SCHEME, {guile-2.0}, {(setlocale LC_ALL "")})
                     tst)))
     (map (lambda (t)
            (when t
-                 (display "(test ")
-                 (display *n*)
-                 (display " ")
-                 (write t)
-                 (display ")")
-                 (newline))
+                 (test *n* t))
            (set! *n* (+ *n* 1)))
          tests)))
 
 ;; This outputs the code for each chapter heading
 (define (make-chapter c)
-  (display "(newline)")
   (newline)
-  (display "(display \"Chapter: ")
+  (display "Chapter: ")
   (display c)
-  (display "\")")
-  (newline)
-  (display "(newline)")
   (newline))
 
-m4_ifelse(SCHEME, {guile-2.0}, {
-(display "
-(setlocale LC_ALL \"\")
-(newline)
+;; If a string has C0 control characters (ASCII less than 32)
+;; display them in ^C notation.
+(define (escape-controls str)
+  (string-fold 
+   (lambda (c s)
+     (let* ((n (char->integer c))
+            (cstr (cond 
+                   ((< n 32)
+                    (string #\^ (integer->char (+ n 64))))
+                   ((= n 127)
+                    "<del>")
+                   (else
+                    (string c)))))
+       (string-append s cstr)))
+   ""
+   str))
+
+m4_ifelse(TARGET, {guile-2.0}, {
+(define (test n name)
+  m4_ifdef({TEST_UNICODE},{
+  (with-fluids ((%default-port-encoding "UTF-8"))
+  },{
+  (with-fluids ((%default-port-encoding "US-ASCII"))
+  })
+               (let* ((n-string (number->string n))
+                      (val (false-if-exception (with-input-from-string name read)))
+                      (d-string (with-output-to-string
+                                  (lambda () (display val))))
+                      (w-string (with-output-to-string
+                                  (lambda () (write val)))))
+                 (display (make-string (- 6 (string-length n-string)) #\space))
+                 (display n)
+                 (display ": ")
+                 (display (escape-controls name))
+                 (display (make-string (max 1 (- 16 (string-length name))) #\space))
+                 (display " : ")
+                 (display (escape-controls w-string))
+                 (display " : ")
+                 (display (escape-controls d-string))
+                 (newline))))
+})
+m4_ifelse(TARGET, {guile-1.8}, {
 (define (test n name)
   (let* ((n-string (number->string n))
          (val (false-if-exception (with-input-from-string name read)))
@@ -165,21 +225,18 @@ m4_ifelse(SCHEME, {guile-2.0}, {
                      (lambda () (display val))))
          (w-string (with-output-to-string
                      (lambda () (write val)))))
-      (display (make-string (- 6 (string-length n-string)) #\\space))
-      (display n)
-      (display \": \")
-      (display name)
-      (display (make-string (max 1 (- 16 (string-length name))) #\\space))
-      (display \" : \")
-      (display w-string)
-      (display \" : \")
-      (display d-string)
-      (newline)))
-")
+    (display (make-string (- 6 (string-length n-string)) #\space))
+    (display n)
+    (display ": ")
+    (display (escape-controls name))
+    (display (make-string (max 1 (- 16 (string-length name))) #\space))
+    (display " : ")
+    (display (escape-controls w-string))
+    (display " : ")
+    (display (escape-controls d-string))
+    (newline)))
 })
-
-m4_ifelse(SCHEME, {mzscheme-4.1}, {
-(display "
+m4_ifelse(TARGET, {mzscheme-4.1}, {
 (define (test n name)
   (let* ((n-string (number->string n))
          (i (open-input-string name))
@@ -191,15 +248,14 @@ m4_ifelse(SCHEME, {mzscheme-4.1}, {
     (write val w-string)
     (display (make-string (- 6 (string-length n-string)) #\\space))
     (display n)
-    (display \": \")
+    (display ": ")
     (display name)
     (display (make-string (max 1 (- 16 (string-length name))) #\\space))
-    (display \" : \")
+    (display " : ")
     (display (get-output-string w-string))
-    (display \" : \")
+    (display " : ")
     (display (get-output-string d-string))
     (newline)))
-")
 })
 
 ;;-----------------------------------------------------
@@ -210,28 +266,33 @@ m4_ifelse(SCHEME, {mzscheme-4.1}, {
    (list-product '("'") (initial))
    (list-product '("'") (initial) (subsequent))
    (list-product '("'") (peculiar-identifier))
-   m4_ifdef(R6RS, {
+m4_ifelse(TEST_R6RS,{1},{
    (list "'->")
    (list-product '("'->") (subsequent))
-   },{
+},{
    (list #f)
-   (list-product '(#f) (subsequent))
-   })
+   (ignore-list-product '("'->") (subsequent))
+})
    ))
 
 (define (initial)
+m4_ifelse(TEST_SYMBOL_ESCAPE,{1},{
   (append
    (constituent)
    (special-initial)
-m4_ifdef(R6RS, {
-   (inline-hex-escape)
+   (inline-hex-escape))
+},{
+  (append
+   (constituent)
+   (special-initial)
+   (ignore-list-product (inline-hex-escape)))
 })
-))
+   )
 
 (define (constituent)
   (append
    (letter)
-m4_ifdef(R6RS_UNICODE, {
+m4_ifelse(TEST_R6RS_UNICODE,{1},{
    (category-Lu)
    (category-Ll)
    (category-Lt)
@@ -257,7 +318,22 @@ m4_ifdef(R6RS_UNICODE, {
 (define (letter)
   '("a" "z" "A" "Z"))
 
-m4_ifdef({R6RS_UNICODE},{
+(define (inline-hex-escape)
+  (append
+   (map (lambda (n)
+          (let ((hex (number->string n 16)))
+            (string-append "\\x" hex ";")))
+        (range 0 127))
+m4_ifelse(TEST_R6RS_UNICODE,{1},{
+   (list "\\x0100;" "\\x1E00;" "\\x2f878;")
+},{
+   (list #f #f #f)
+})
+   ))
+
+
+m4_ifelse(TEST_R6RS_UNICODE,{1},{
+m4_ifelse(UTF_8,{1},{
 (define (category-Lu) '("À"))	; U+00c0 LATIN CAPITAL LETTER A GRAVE
 (define (category-Ll) '("à"))	; U+00E0 LATIN SMALL LETTER A GRAVE
 (define (category-Lt) '("ǅ"))	; U+01C5 LATIN CAPITAL LETTER D WITH
@@ -278,6 +354,48 @@ m4_ifdef({R6RS_UNICODE},{
 (define (category-Nd) '("٠"))	; U+0660 ARABIC-INDIC DIGIT ZERO
 (define (category-Mc) '("ः"))	; U+0903 DEVANAGARI SIGN VISARGA
 (define (category-Me) '("҈")) ; U+0488 COMBINING CYRILLIC HUNDRED THOUSAND
+},{
+(define (X c)
+  (list (string (integer->char c))))
+;; U+00c0 LATIN CAPITAL LETTER A GRAVE
+(define (category-Lu) (X #x00c0))
+;; U+00E0 LATIN SMALL LETTER A GRAVE
+(define (category-Ll) (X #x00e0))
+;; U+01C5 LATIN CAPITAL LETTER D WITH SMALL LETTER Z WITH CARON
+(define (category-Lt) (X #x01c5))	
+;; U+02b0 MODIFIER LETTER SMALL H
+(define (category-Lm) (X #x02b0))
+;; U+01bb LATIN LETTER TWO WITH STROKE
+(define (category-Lo) (X #x01bb))
+;; U+0300 COMBINING GRAVE ACCENT
+(define (category-Mn) (X #x0300))	
+;; U+3021 HANGZHOU NUMERAL ONE
+(define (category-Nl) (X #x3021))
+;; U+00b2 SUPERSCRIPT TWO
+(define (category-No) (X #x00b2))	
+;; U+058A ARMENIAN HYPHEN
+(define (category-Pd) (X #x058a))	
+;; U+203f UNDERTIE
+(define (category-Pc) (X #x203f))	
+;; U+00a1 INVERTED EXCLAMATION POINT
+(define (category-Po) (X #x00a1))	
+;; U+00a2 CENT SIGN
+(define (category-Sc) (X #x00a2))
+;; U+00d7 MULTIPLICATION SIGN
+(define (category-Sm) (X #x00d7))
+;; U+00a8 DIAERESIS
+(define (category-Sk) (X #x00a8))
+;; U+00a9 COPYRIGHT SIGN
+(define (category-So) (X #x00a9))
+;; U+E000 PRIVATE USE FIRST
+(define (category-Co) (X #xe000))	
+;; U+0660 ARABIC-INDIC DIGIT ZERO
+(define (category-Nd) (X #x0660))
+;; U+0903 DEVANAGARI SIGN VISARGA
+(define (category-Mc) (X #x0903))
+;; U+0488 COMBINING CYRILLIC HUNDRED THOUSAND	
+(define (category-Me) (X #x0488))
+})
 })
 
 (define (special-initial)
@@ -288,11 +406,11 @@ m4_ifdef({R6RS_UNICODE},{
    (initial)
    (digit 10)
    (special-subsequent)
-   m4_ifdef({R6RS_UNICODE},{
+m4_ifelse(TEST_R6RS_UNICODE,{1},{
    (category-Nd)
    (category-Mc)
    (category-Me)
-   },{
+},{
    '(#f #f #f)
    })
    ))
@@ -441,23 +559,19 @@ m4_ifdef({R6RS_UNICODE},{
 (define (character)
   (append
    (list-product '("#\\") (any-character))
-   m4_ifdef({CHAR_HEX_ESCAPES},{
    (list-product '("#\\x") (hex-scalar-value))
-   },{
-   (list-product '(#f) (hex-scalar-value))
-   })
    (list-product '("#\\") (r5rs-character-name))
-   m4_ifdef({R6RS},{
+m4_ifelse(TEST_R6RS,{1},{
    (list-product '("#\\") (r6rs-character-name))
-   },{
+},{
    (list-product '(#f) (r6rs-character-name))
-   })
+})
    ))
 
 (define (any-character)
   (append
-   (map (lambda (n) (string (integer->char n ))) (range 1 127))
-   m4_ifdef({R6RS_UNICODE},{
+   (map (lambda (n) (string (integer->char n ))) (range 0 127))
+m4_ifelse(TEST_R6RS_UNICODE,{1},{
    (category-Lu)
    (category-Ll)
    (category-Lt)
@@ -478,20 +592,29 @@ m4_ifdef({R6RS_UNICODE},{
    (category-Nd)
    (category-Mc)
    (category-Me)
-   },{
+},{
    '(#f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f #f)
-   })
+})
    ))
 
 (define (r5rs-character-name)
   '("space" "newline" "SPACE" "NEWLINE"))
 
 (define (hex-scalar-value)
-  (map (lambda (n) (number->string n 16)) (range 1 127)))
+m4_ifelse(TEST_R6RS_UNICODE,{1},{
+  (map (lambda (n) (number->string n 16)) 
+       (append (range 0 127) (list #x0100 #x1E00 #x2f878)))
+},{
+  (append (map (lambda (n) (number->string n 16)) 
+               (range 0 127))
+          (list #f #f #f))
+})
+)
 
-(define (r6rs-character-name)
-  '("nul" 
-    m4_ifdef({R6RS}, {"alarm"}, {#f})
+(define (r6rs-character-name) 
+  '(
+    "nul"
+    "alarm"
     "backspace" "tab" "linefeed" "newline" "vtab"
     "page" "return" "esc" "space" "delete"))
 
@@ -502,7 +625,13 @@ m4_ifdef({R6RS_UNICODE},{
 (define (t-string)
   (append
    '("\"\"")
-   (list-product '("\"") (t-string-element) '("\""))))
+   (list-product '("\"") (t-string-element) '("\""))
+m4_ifdef({TEST_R6RS},{
+   (list-product '("\"") (t-string-escapes) '("\""))
+},{
+   (ignore-list-product '("\"") (t-string-escapes) '("\""))
+})
+  ))
 
 (define (t-string-element)
   (map (lambda (n)
@@ -514,6 +643,22 @@ m4_ifdef({R6RS_UNICODE},{
              (string #\\ #\\))
             (else
              (string c)))))
-       (range 1 127)))
+       (range 0 127)))
+
+(define (t-string-escapes)
+  (append
+   (list "\\a" "\\b" "\\t" "\\n" "\\v" "\\f" "\\r")
+   (map (lambda (n)
+          (let ((hex (number->string n 16)))
+            (string-append "\\x" hex ";")))
+        (range 0 127))
+m4_ifelse(TEST_R6RS_UNICODE,{1},{
+   (list "\\x100;" "\\x1e00;" "\\x2f878;")
+},{
+   (list #f #f #f)
+})
+  ))
 
 (run-test)
+
+m4_dumpdef
