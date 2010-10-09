@@ -16,12 +16,14 @@ to previous runs to see how the parser has changed.
 like the following
 
 (test 1 "'a")
+(test 69485 "#\\x45")
 
 The "test" looks in the string that is the last parmeter for a token.
 And then it does nothing more than write and then display the token
-that is the last parameter.  The line above would output the following
+that is the last parameter.  The lines above would output the following
 
-     1: 'a               : a : a
+     1: 'a               : (quote a) : (quote a)
+ 69485: #\x45            : #\E : E
 
 The four columns are
 
