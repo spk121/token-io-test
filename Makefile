@@ -7,8 +7,8 @@
 
 ## EDIT ME: choose a target
 # target = guile-1.8
-target = guile-2.0
-# target = mzscheme-4.1
+# target = guile-2.0
+target = mzscheme-4.1
 # target = mit-gnu-scheme-9.0
 
 ## default parameters
@@ -34,10 +34,9 @@ test_unicode = 1
 endif
 
 ifeq ($(target), mit-gnu-scheme-9.0)
-cmd = mzscheme -f
-utf_8 = 1
+utf_8 = 0
 test_r6rs = 1
-test_unicode = 1
+test_unicode = 0
 endif
 
 iotest.scm: gen-iotest.in

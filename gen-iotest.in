@@ -54,9 +54,7 @@ m4_ifelse(TARGET, {guile-2.0}, {
              (rnrs control))
 (read-enable 'r6rs-hex-escapes)
 })
-m4_ifelse(TARGET, {mzscheme-4.1},{
-(require srfi/1)
-})
+
 m4_ifelse(TARGET, {guile-1.8}, {
 (define-syntax when
   (syntax-rules ()
@@ -64,6 +62,25 @@ m4_ifelse(TARGET, {guile-1.8}, {
     (if test
         (begin result1 result2 ...)))))
 })
+m4_ifelse(TARGET, {mzscheme-4.1},{
+(require srfi/1)
+(define (string-fold kons knil s)
+  (let lp ((v knil) (i 0))
+    (if (< i (string-length s)) (lp (kons (string-ref s i) v) (+ i 1))
+	v)))
+})
+m4_ifelse(TARGET, {mit-gnu-scheme-9.0},{
+(define-syntax when
+  (syntax-rules ()
+    ((when test result1 result2 ...)
+    (if test
+        (begin result1 result2 ...)))))
+(define (string-fold kons knil s)
+  (let lp ((v knil) (i 0))
+    (if (< i (string-length s)) (lp (kons (string-ref s i) v) (+ i 1))
+	v)))
+})
+
 ;;; FUNCTIONS
 
 m4_ifdef({TEST_UNICODE},{
@@ -246,18 +263,36 @@ m4_ifelse(TARGET, {mzscheme-4.1}, {
          (w-string (open-output-string)))
     (display val d-string)
     (write val w-string)
-    (display (make-string (- 6 (string-length n-string)) #\\space))
+    (display (make-string (- 6 (string-length n-string)) #\space))
     (display n)
     (display ": ")
-    (display name)
-    (display (make-string (max 1 (- 16 (string-length name))) #\\space))
+    (display (escape-controls name))
+    (display (make-string (max 1 (- 16 (string-length name))) #\space))
     (display " : ")
-    (display (get-output-string w-string))
+    (display (escape-controls (get-output-string w-string)))
     (display " : ")
-    (display (get-output-string d-string))
+    (display (escape-controls (get-output-string d-string)))
     (newline)))
 })
-
+m4_ifelse(TARGET, {mit-gnu-scheme-9.0}, {
+(define (test n name)
+  (let* ((n-string (number->string n))
+	 (val (ignore-errors (lambda () (with-input-from-string name read))))
+	 (d-string (with-output-to-string
+		     (lambda () (display val))))
+	 (w-string (with-output-to-string
+		     (lambda () (write val)))))
+      (display (make-string (- 6 (string-length n-string)) #\space))
+      (display n)
+      (display ": ")
+      (display (escape-controls name))
+      (display (make-string (max 1 (- 16 (string-length name))) #\space))
+      (display " : ")
+      (display (escape-controls w-string))
+      (display " : ")
+      (display (escape-controls d-string))
+      (newline)))
+})
 ;;-----------------------------------------------------
 ;; RnRS Identifier
 
@@ -661,4 +696,3 @@ m4_ifelse(TEST_R6RS_UNICODE,{1},{
 
 (run-test)
 
-m4_dumpdef
