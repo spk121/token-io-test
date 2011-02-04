@@ -7,8 +7,8 @@
 
 ## EDIT ME: choose a target
 # target = guile-1.8
-# target = guile-2.0
-target = mzscheme-4.1
+target = guile-2.0
+# target = mzscheme-4.1
 # target = mit-gnu-scheme-9.0
 
 ## default parameters
